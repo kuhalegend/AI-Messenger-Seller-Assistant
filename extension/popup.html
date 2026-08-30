@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Messenger</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="mark">AI</div>
+      <div><strong>AI Messenger</strong><small>Seller Assistant MVP</small></div>
+    </header>
+
+    <section class="card">
+      <div class="row"><b>Extension</b><span id="status">Checking…</span></div>
+      <p>Detection-only mode is enabled for the first live Messenger test. No AI reply will be sent yet.</p>
+      <button id="scanBtn">Scan current Messenger</button>
+    </section>
+
+    <section class="card">
+      <div class="row"><b>Safety lock</b><span class="pill">AUTO SEND OFF</span></div>
+      <p>Auto reply stays locked until incoming/outgoing detection, duplicate protection, and human takeover are verified.</p>
+    </section>
+
+    <section class="card">
+      <b>Last detection</b>
+      <p id="lastEvent">None yet.</p>
+    </section>
+
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
