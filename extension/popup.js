@@ -23,7 +23,7 @@ function escapeHtml(value = '') {
 }
 
 async function refreshEvents() {
-  const r = await runtime('AI_MESSENGER_GET_EVENTS', { limit: 8 });
+  const r = await runtime('AI_MESSENGER_GET_EVENTS', { limit: 12 });
   const list = $('eventList');
   if (!r?.ok || !Array.isArray(r.data) || !r.data.length) {
     list.innerHTML = '<p>No candidates yet.</p>';
@@ -32,11 +32,13 @@ async function refreshEvents() {
 
   list.innerHTML = r.data.map((event) => {
     const p = event.payload || {};
-    const direction = p.directionCandidate || 'unknown';
-    const body = String(p.body || '').slice(0, 220);
+    const direction = p.direction || p.directionCandidate || 'unknown';
+    const evidence = p.directionEvidence || 'legacy';
+    const sender = p.sender ? ` • ${p.sender}` : '';
+    const body = String(p.body || '').slice(0, 260);
     return `<div class="event-item">
-      <div class="event-meta"><span>${escapeHtml(direction)}</span><span>${escapeHtml(p.surfaceMode || '')}</span></div>
-      <div class="event-body">${escapeHtml(body)}</div>
+      <div class="event-meta"><span>${escapeHtml(direction)}</span><span>${escapeHtml(evidence)}</span></div>
+      <div class="event-body"><b>${escapeHtml(sender ? sender.slice(3) : '')}</b>${sender ? '<br>' : ''}${escapeHtml(body)}</div>
     </div>`;
   }).join('');
 }
@@ -57,7 +59,7 @@ async function refresh() {
 
 async function ensureBridge(tabId) {
   let ping = await chrome.tabs.sendMessage(tabId, { type: 'AI_MESSENGER_PING' }).catch(() => null);
-  if (ping?.ok) return { ok: true, injected: false, ping };
+  if (ping?.ok && ping.bridgeVersion === '0.4.0') return { ok: true, injected: false, ping };
 
   try {
     await chrome.scripting.executeScript({
@@ -90,7 +92,8 @@ $('scanBtn').onclick = async () => {
   if (!r?.ok) return setMessage('Bridge connected but scan failed. Reload Facebook and try again.', true);
 
   const modes = (r.diagnostics || []).map((d) => d.mode).join(', ') || 'none';
-  setMessage(`Bridge ${r.bridgeVersion} connected. ${r.surfaceCount} chat surface(s), ${r.count} candidate message element(s). Mode: ${modes}.`);
+  const s = r.summary || {};
+  setMessage(`Bridge ${r.bridgeVersion} connected. ${r.surfaceCount} chat surface(s), ${r.count} candidates. Confirmed: ${s.inbound || 0} inbound / ${s.outbound || 0} outbound. Heuristic-only: ${s.inbound_candidate || 0} inbound / ${s.outbound_candidate || 0} outbound. Mode: ${modes}.`);
   await refresh();
 };
 
