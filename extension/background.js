@@ -27,12 +27,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return { ok: true, data: await getState() };
     }
 
+    if (message.type === 'AI_MESSENGER_GET_EVENTS') {
+      const { aiMessengerEventBuffer = [] } = await chrome.storage.local.get('aiMessengerEventBuffer');
+      const limit = Math.max(1, Math.min(Number(message.limit || 8), 25));
+      return { ok: true, data: aiMessengerEventBuffer.slice(-limit).reverse() };
+    }
+
+    if (message.type === 'AI_MESSENGER_CLEAR_EVENTS') {
+      await chrome.storage.local.set({ aiMessengerEventBuffer: [] });
+      return { ok: true };
+    }
+
     if (message.type === 'AI_MESSENGER_SET_STATE') {
       const allowed = {};
       if (typeof message.patch?.enabled === 'boolean') allowed.enabled = message.patch.enabled;
       if (typeof message.patch?.detectionOnly === 'boolean') allowed.detectionOnly = message.patch.detectionOnly;
 
-      // MVP guard: auto reply stays disabled until explicit later implementation.
       if (message.patch?.autoReplyEnabled === true) {
         throw new Error('Auto reply is locked during the detection-only MVP.');
       }
