@@ -1,6 +1,6 @@
 (() => {
-  if (globalThis.__AI_MESSENGER_BRIDGE_V02__) return;
-  globalThis.__AI_MESSENGER_BRIDGE_V02__ = true;
+  if (globalThis.__AI_MESSENGER_BRIDGE_V04__) return;
+  globalThis.__AI_MESSENGER_BRIDGE_V04__ = true;
 
   const SEEN = new Set();
   const MAX_SEEN = 1000;
@@ -17,11 +17,7 @@
   }
 
   function getParticipantName(root = document) {
-    const candidates = [
-      'h2',
-      'h1',
-      '[role="heading"]'
-    ];
+    const candidates = ['h2', 'h1', '[role="heading"]'];
     for (const sel of candidates) {
       const el = [...root.querySelectorAll(sel)].find(isVisible);
       const t = textOf(el);
@@ -91,28 +87,84 @@
     return { elements: [...new Set(found)], selectorCounts };
   }
 
-  function inferDirection(el, surface) {
-    const aria = String(el.getAttribute('aria-label') || '').toLowerCase();
-    if (/you sent|sent by you|your message/.test(aria)) return 'outbound';
+  function accessibilityStrings(el) {
+    const values = [
+      textOf(el),
+      String(el.getAttribute('aria-label') || '').trim()
+    ];
+
+    for (const child of el.querySelectorAll('[aria-label]')) {
+      const value = String(child.getAttribute('aria-label') || '').trim();
+      if (value && value.length <= 5000) values.push(value);
+    }
+
+    return [...new Set(values.filter(Boolean))];
+  }
+
+  function parseExplicitMessageLabel(value) {
+    const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+    const match = normalized.match(/(?:^|\b)Message sent\b.*?\bby\s+([^:]{1,120}):\s*(.+)$/i);
+    if (!match) return null;
+
+    const sender = match[1].trim();
+    const body = match[2].trim();
+    if (!body) return null;
+
+    return {
+      sender,
+      body,
+      direction: /^you$/i.test(sender) ? 'outbound' : 'inbound',
+      evidence: 'facebook_accessibility_sender'
+    };
+  }
+
+  function analyzeCandidate(el, surface) {
+    const rawText = textOf(el);
+
+    for (const value of accessibilityStrings(el)) {
+      const explicit = parseExplicitMessageLabel(value);
+      if (explicit) {
+        return {
+          ...explicit,
+          rawText,
+          participantName: getParticipantName(surface.root)
+        };
+      }
+    }
 
     const rect = el.getBoundingClientRect();
     const parentRect = (surface?.root || document.body).getBoundingClientRect();
     const center = rect.left + rect.width / 2;
     const parentCenter = parentRect.left + parentRect.width / 2;
-    return center > parentCenter ? 'outbound_candidate' : 'inbound_candidate';
+
+    return {
+      sender: null,
+      body: rawText,
+      direction: center > parentCenter ? 'outbound_candidate' : 'inbound_candidate',
+      evidence: 'layout_heuristic_only',
+      rawText,
+      participantName: getParticipantName(surface.root)
+    };
   }
 
-  function fingerprint(surface, el, body) {
+  function fingerprint(surface, el, analysis) {
     const rect = el.getBoundingClientRect();
-    return [getThreadKey(surface), body, Math.round(rect.top), Math.round(rect.left)].join('|');
+    return [
+      getThreadKey(surface),
+      analysis.direction,
+      analysis.sender || '',
+      analysis.body,
+      Math.round(rect.top),
+      Math.round(rect.left)
+    ].join('|');
   }
 
   async function emitCandidate(surface, el) {
-    const body = textOf(el);
-    if (!body) return;
+    const analysis = analyzeCandidate(el, surface);
+    if (!analysis.body) return null;
 
-    const fp = fingerprint(surface, el, body);
-    if (SEEN.has(fp)) return;
+    const fp = fingerprint(surface, el, analysis);
+    if (SEEN.has(fp)) return analysis;
 
     SEEN.add(fp);
     if (SEEN.size > MAX_SEEN) {
@@ -126,33 +178,47 @@
         eventType: 'message_candidate',
         surfaceMode: surface.mode,
         threadKey: getThreadKey(surface),
-        participantName: getParticipantName(surface.root),
-        body,
-        directionCandidate: inferDirection(el, surface),
+        participantName: analysis.participantName,
+        sender: analysis.sender,
+        body: analysis.body,
+        rawText: analysis.rawText,
+        direction: analysis.direction,
+        directionEvidence: analysis.evidence,
         pageUrl: location.href,
         detectedAt: new Date().toISOString()
       }
     }).catch(() => null);
+
+    return analysis;
   }
 
   async function scanNow() {
     const surfaces = getSurfaces();
     let total = 0;
     const diagnostics = [];
+    const summary = { outbound: 0, inbound: 0, outbound_candidate: 0, inbound_candidate: 0, unknown: 0 };
 
     for (const surface of surfaces) {
       const { elements, selectorCounts } = candidatesForSurface(surface);
       total += elements.length;
+      const analyses = await Promise.all(elements.map((el) => emitCandidate(surface, el)));
+
+      for (const analysis of analyses) {
+        if (!analysis) continue;
+        if (Object.prototype.hasOwnProperty.call(summary, analysis.direction)) summary[analysis.direction] += 1;
+        else summary.unknown += 1;
+      }
+
       diagnostics.push({ mode: surface.mode, candidateCount: elements.length, selectorCounts });
-      await Promise.all(elements.map((el) => emitCandidate(surface, el)));
     }
 
     return {
       ok: true,
-      bridgeVersion: '0.2.0',
+      bridgeVersion: '0.4.0',
       pageUrl: location.href,
       surfaceCount: surfaces.length,
       count: total,
+      summary,
       diagnostics
     };
   }
@@ -169,7 +235,7 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'AI_MESSENGER_PING') {
-      sendResponse({ ok: true, bridgeVersion: '0.2.0', pageUrl: location.href });
+      sendResponse({ ok: true, bridgeVersion: '0.4.0', pageUrl: location.href });
       return;
     }
 
