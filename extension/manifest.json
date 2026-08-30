@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "AI Messenger Seller Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Seller assistant bridge for personal Facebook Messenger. MVP starts in detection-only mode.",
   "permissions": [
     "storage",
     "tabs",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "https://www.facebook.com/*",
@@ -22,8 +23,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.facebook.com/messages/*",
-        "https://facebook.com/messages/*"
+        "https://www.facebook.com/*",
+        "https://facebook.com/*"
       ],
       "js": [
         "content-messenger.js"
