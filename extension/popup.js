@@ -13,6 +13,34 @@ function isFacebookUrl(url = '') {
   return /^https:\/\/(www\.)?facebook\.com\//.test(url);
 }
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+async function refreshEvents() {
+  const r = await runtime('AI_MESSENGER_GET_EVENTS', { limit: 8 });
+  const list = $('eventList');
+  if (!r?.ok || !Array.isArray(r.data) || !r.data.length) {
+    list.innerHTML = '<p>No candidates yet.</p>';
+    return;
+  }
+
+  list.innerHTML = r.data.map((event) => {
+    const p = event.payload || {};
+    const direction = p.directionCandidate || 'unknown';
+    const body = String(p.body || '').slice(0, 220);
+    return `<div class="event-item">
+      <div class="event-meta"><span>${escapeHtml(direction)}</span><span>${escapeHtml(p.surfaceMode || '')}</span></div>
+      <div class="event-body">${escapeHtml(body)}</div>
+    </div>`;
+  }).join('');
+}
+
 async function refresh() {
   const r = await runtime('AI_MESSENGER_GET_STATE');
   if (!r?.ok) {
@@ -24,6 +52,7 @@ async function refresh() {
   $('lastEvent').textContent = r.data.lastEventAt
     ? new Date(r.data.lastEventAt).toLocaleString()
     : 'None yet.';
+  await refreshEvents();
 }
 
 async function ensureBridge(tabId) {
@@ -63,6 +92,12 @@ $('scanBtn').onclick = async () => {
   const modes = (r.diagnostics || []).map((d) => d.mode).join(', ') || 'none';
   setMessage(`Bridge ${r.bridgeVersion} connected. ${r.surfaceCount} chat surface(s), ${r.count} candidate message element(s). Mode: ${modes}.`);
   await refresh();
+};
+
+$('clearBtn').onclick = async () => {
+  await runtime('AI_MESSENGER_CLEAR_EVENTS');
+  await refreshEvents();
+  setMessage('Detection list cleared. Scan again for a clean test.');
 };
 
 refresh();
