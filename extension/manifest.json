@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Messenger Seller Assistant",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Seller assistant bridge for personal Facebook Messenger. MVP starts in detection-only mode.",
   "permissions": [
     "storage",
